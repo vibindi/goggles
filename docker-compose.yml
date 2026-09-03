@@ -1,0 +1,58 @@
+networks:
+  goggles-network:
+    name: goggles-network
+
+volumes:
+  ollama-data:
+
+services:
+  backend:
+    build: ./backend
+    container_name: goggles-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      PORT: "8000"
+    networks:
+      - goggles-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Hosts multiple MCP servers as separate processes in one container — see
+  # mcp-servers/entrypoint.py and mcp-servers/servers.json. Adding a server
+  # just means a new servers/<name>/ dir + a servers.json entry, as long as
+  # its port falls in the range below; no changes needed here.
+  mcp-servers:
+    build: ./mcp-servers
+    container_name: goggles-mcp-servers
+    ports:
+      - "${MCP_SERVERS_PORT_RANGE:-8001-8010}:8001-8010"
+    networks:
+      - goggles-network
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama
+    container_name: goggles-ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - goggles-network
+
+  # Langfuse self-hosting is a multi-container setup (Postgres, ClickHouse,
+  # Redis, MinIO, langfuse-web, langfuse-worker) that needs real configuration,
+  # not just scaffolding — see langfuse/README.md for how to wire it in when
+  # you're ready, starting from https://langfuse.com/self-hosting/docker-compose
+  #
+  # langfuse-web:
+  #   image: langfuse/langfuse:3
+  #   ...
